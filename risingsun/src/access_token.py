@@ -1,5 +1,5 @@
-from fyers_api import accessToken
 from fyers_api import fyersModel
+from fyers_api import accessToken
 import os
 import webbrowser
 
@@ -18,10 +18,10 @@ def get_access_token():
     """
     print("\n\nRetrieving: Access Token from FYERS Server")
     if not os.path.exists("access_token.txt"):
-
         session = accessToken.SessionModel(client_id=APP_ID, secret_key=SECRET_KEY, redirect_uri=REDIRECT_URI,
                                            response_type=RESPONSE_TYPE, grant_type=GRANT_TYPE)
         response = session.generate_authcode()
+        print(response)
         print("open")
         webbrowser.open(response)
         auth_code = input("1. Enter Auth Code: ")
