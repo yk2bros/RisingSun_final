@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import talib
 from datetime import datetime
+import openpyxl
 
 MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November',
           'December']
@@ -22,7 +23,6 @@ def get_custom_epoch(days: int) -> int:
     seconds_in_day = days * (24 * 60 * 60)
     required_time = current_time - seconds_in_day
     return int(required_time)
-
 
 def get_custom_date(days: int):
     """
@@ -82,7 +82,7 @@ def get_history_data(data2: dict):
 
 def get_supertrend(df, atr_period, multiplier):
     """
-    Returns the values of Supertrend
+    Returns the values of Supertrend in boolean
     :param df: Excel jaisa table dikhta hain Dataframe  mein, else wo list rahegi
     :param atr_period: value defined by us
     :param multiplier: value defined by us
@@ -166,7 +166,6 @@ def get_dema_last_value(close_values: list, time_period: int):
     :param time_period: 5 or 10 or 15 in integer value
     :return: DEMA
     """
-
     dema = talib.DEMA(np.array(close_values), timeperiod=time_period)
     return dema[-1]
 
@@ -193,7 +192,7 @@ def list_to_npdf(list: list):
 def get_ema(close_values, period):
     """
     Gives the EMA value
-    :param price: closing price of stocks
+    :param close_values: closing price of stocks
     :param period: Looks for the previous specific number of candles for calculation, user-defined integer
     :return: EMA Value
     """
@@ -376,7 +375,7 @@ def modify_order(modify_data):
 def cancel_order(cancel_order_id):
     """
     Order Cancel karta hain FYERS app mein
-    :param cancel_data: contains all details as per FYERS API to cancel order
+    :param cancel_order_id: contains all details as per FYERS API to cancel order
     :return: prints and returns cancelled order ID
     """
     cancelled_order = access_token.get_fyers_entry_point().cancel_order(cancel_order_id)
@@ -387,7 +386,7 @@ def cancel_order(cancel_order_id):
 def exit_order(exit_order_data):
     """
     Order Exit karta hain FYERS app mein
-    :param exit_data: contains all details as per FYERS API to exit order
+    :param exit_order_data: contains all details as per FYERS API to exit order
     :return: prints and returns exited order ID
     """
     exit_order = access_token.get_fyers_entry_point().exit_positions(exit_order_data)
@@ -398,7 +397,7 @@ def exit_order(exit_order_data):
 def sell_order(sell_data):
     """
     Order Sell karta hain FYERS app mein
-    :param modify_data: contains all details as per FYERS API to sell order
+    :param sell_data: contains all details as per FYERS API to sell order
     :return: prints and returns sold order ID
     """
     sold_order = access_token.get_fyers_entry_point().place_order(sell_data)
@@ -462,7 +461,7 @@ def create_sell_data(symbol,
     Create a structure of data to be passed while placing orders.
     :param symbol:
     :param type: Limit Order, Market Order as per FYERS
-    :param quantity:
+    :param quantity2:
     :param SELL_SIDE:
     :param product_type: CNC, MIS
     :param limit_price: MAX value jispe bechna hain
@@ -489,8 +488,464 @@ def create_sell_data(symbol,
 
     return sell_data
 
-def quantity(funds,stop_loss):
 
-    funds = 50000
+def get_quantity(funds, rr):
+    """
+    Returns the quantity of no. of shares to be purchased
+    :param funds: Total amount of money to trade (fyers wallet money)
+    :param rr: trading parameter
+    :return: quantity
+    """
+    risk_per_trade = 0.01 * funds / 5
+    quantity = risk_per_trade / rr
+    return int(quantity)
+
+
+def get_ema_supertrend_strategy(period, df, sup_multiplier, sup_atr, HIGH_VALUES, CLOSE_VALUES, LOW_VALUES, funds,
+                                rr_ratio):
+    ema_value = get_ema(CLOSE_VALUES, period)
+    supertrend_df = get_supertrend(df, sup_atr, sup_multiplier)
+    ###########################################
+    FLAG = 0
+    trade_counter = 0
+    net_pnl = 0
+    stoploss_counter = 0
+    buy_value = 0
+    stop_loss = 0
+    target = 0
+
+    ##########################################
+    # for i in range(len(supertrend_df)):
+    #     if supertrend_df["Supertrend"][i] == True:
+    #         # print("Supertrend is trigged")
+    #         if (ema_value[i] > HIGH_VALUES[i]) and (i < (len(supertrend_df) - 1)):
+    #             # print("2nd if is triggerd")
+    #             if CLOSE_VALUES[i + 1] > HIGH_VALUES[i] and FLAG == 0:
+    #                 print("Buy")
+    #                 print(f'Index:{i} and close value of i+1 st : {CLOSE_VALUES[i + 1]}')
+    #
+    #                 FLAG = 1
+    #                 stop_loss = LOW_VALUES[i] if LOW_VALUES[i] < LOW_VALUES[i + 1] else LOW_VALUES[i + 1]
+    #                 buy_value = CLOSE_VALUES[i + 1]
+    #                 rr = abs(stop_loss - buy_value)
+    #                 quantity = get_quantity(funds, rr)
+    #                 target = rr * rr_ratio
+    #                 print(f"The value of rr is : {rr}")
+    #                 if int(quantity) % 2 == 0:
+    #                     quantity_even = quantity
+    #                     print(f"The number of quantities purchased: {quantity}")
+    #                 else:
+    #                     quantity_even = quantity - 1
+    #                     print(f"The number of quantities purchased: {quantity - 1}")
+    #
+    #
+    #     elif (FLAG == 1 and CLOSE_VALUES[i] > (buy_value+target)):
+    #         print("Sell")
+    #         sell_value = CLOSE_VALUES[i]
+    #         profit = (sell_value - buy_value)*quantity
+    #         print(f'The sell value is: {sell_value}')
+    #         print(f'The profit is: {profit}')
+    #         FLAG = 0
+    #         trade_counter = trade_counter + 1
+    #         net_pnl = net_pnl + profit
+    #
+    #     elif FLAG == 1 and CLOSE_VALUES[i] < stop_loss :
+    #         print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    #         sell_value = CLOSE_VALUES[i]
+    #         profit = (sell_value - buy_value)*quantity
+    #         print(f'The sell value is: {sell_value}')
+    #         print(f'The profit is: {profit}')
+    #         FLAG = 0
+    #         trade_counter = trade_counter + 1
+    #         stoploss_counter = stoploss_counter+1
+    #         net_pnl = net_pnl + profit
+    # print(f"Number of trades are: {trade_counter}")
+    # print(f"The net pnl is : {net_pnl}")
+    # print(f'Number of stoploss hit: {stoploss_counter}')
+
+
+def purchase_sell(supertrend, ema, high, low, close, rr):
+    m = len(supertrend)
+    counter = 0
+    flag = True #Can be purchased
+    profit = 0
+    net_pnl = 0
+    trade_counter = 0
     risk_per_trade = 500
-    stoploss =
+
+
+    trade_book = {
+        "Index": [],
+        "Buy": [],
+        "Quantity": [],
+        "Total buy amount": [],
+        "Risk": [],
+        "Stoploss": [],
+        "Sell": [],
+        "Total sell amount": [],
+        "PnL": [],
+        "Net PnL": [],
+
+    }
+    for i in range(m):
+        if supertrend['Supertrend'][i] == True and ema[i] > high[i] and close[i + 1] > high[i] and flag == True:
+            buy = close[i + 1]
+            flag = False
+
+            stoploss = low[i] if low[i] < low[i + 1] else low[i + 1]
+            target = abs(close[i + 1] - stoploss) * rr + close[i + 1]
+            risk = abs(buy - stoploss)
+            quantity = risk_per_trade / risk
+            total_buy_amount = buy * quantity
+
+            # print(f"The buy value of {i + 1} candle is {buy}")
+            # print(f"No. of share bought: {quantity} and total amountto buy:{total_buy_amount}")
+            # print(f"Stoploss: {stoploss} and Target: {target}")
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append(buy)
+            trade_book["Stoploss"].append(stoploss)
+            trade_book["Risk"].append(risk)
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append(total_buy_amount)
+            trade_book["Sell"].append("NaN")
+            trade_book["Total sell amount"].append("NaN")
+            trade_book["PnL"].append("NaN")
+            trade_book["Net PnL"].append("NaN")
+
+
+        elif flag == False and close[i] <= stoploss:
+            sell = close[i]
+            # print(f"The sell value of {i} candle is {sell}")
+            flag = True
+            counter = counter + 1
+            profit = (sell - buy) * quantity
+            net_pnl = net_pnl + profit
+            total_sell_amount = quantity * sell
+            # print(f"No. of share sold: {quantity} and total amount to sell (stoploss): {total_sell_amount}")
+            # print(f"Profit of {i} trade(stoploss): {profit}")
+            trade_counter = trade_counter + 1
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append("NaN")
+            trade_book["Stoploss"].append("NaN")
+            trade_book["Risk"].append("NaN")
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append("NaN")
+            trade_book["Sell"].append(sell)
+            trade_book["Total sell amount"].append(total_sell_amount)
+            trade_book["PnL"].append(profit)
+            trade_book["Net PnL"].append(net_pnl)
+
+        elif flag == False and close[i] >= target:
+            sell = close[i]
+            # print(f"The sell value of {i} candle is {sell}")
+            profit = (sell - buy) * quantity
+            net_pnl = net_pnl + profit
+            flag = True
+            trade_counter = trade_counter + 1
+            total_sell_amount = quantity * sell
+            # print(f"No. of share sold: {quantity} and total amount to sell:{total_sell_amount}")
+            # print(f'Profit of {i} trade: {profit}')
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append("NaN")
+            trade_book["Stoploss"].append("NaN")
+            trade_book["Risk"].append("NaN")
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append("NaN")
+            trade_book["Sell"].append(sell)
+            trade_book["Total sell amount"].append(total_sell_amount)
+            trade_book["PnL"].append(profit)
+            trade_book["Net PnL"].append(net_pnl)
+
+    # print(f"net_pnl: {net_pnl} and no. of trades: {trade_counter} and stoploss counter: {counter} ")
+    trade_book_data_frame = pd.DataFrame(trade_book)
+    # print(trade_book_data_frame.to_string())
+    trade_book_data_frame.to_excel("Trade_book.xlsx", "Book1")
+
+
+def purchase_sell2(supertrend, ema, high, low, close, rr):
+    trade_book = {
+        "Index": [],
+        "Buy": [],
+        "Quantity": [],
+        "Total buy amount": [],
+        "Risk": [],
+        "Stoploss": [],
+        "Sell": [],
+        "Total sell amount": [],
+        "PnL": [],
+        "Net PnL": [],
+    }
+
+    m = len(supertrend)
+    counter = 0
+    buy_flag = True #Can be purchased
+    profit = 0
+    net_pnl = 0
+    trade_counter = 0
+    risk_per_trade = 500
+
+    a = 70
+    #Don't Buy
+    flag1_for_candle = 0
+    flag2_for_candle = 4
+    stoploss = 0
+    buy_flag2 = True  # Buy
+    innerflag = False # Don't Buy
+
+    for i in range(m):
+        print(f"above buy condition {i} and a = {a}\n")
+        if supertrend['Supertrend'][i] == True and ema[i] > high[i] and close[i + 1] > high[i] and buy_flag == True:
+            if i > a:
+                print(f"{i} has crossed the a, where a = {a} \n")
+                innerflag = True
+
+                if(innerflag == True):
+                    flag1_for_candle = flag1_for_candle + 1
+                    print("Cannot be purchased while in this range")
+
+                    if(flag1_for_candle == flag2_for_candle):
+                        a = a + 75
+                        flag1_for_candle = 0
+
+                        innerflag = False
+                        print("Can be purchased while in this range")
+
+            elif(innerflag == False):
+                    print(f"{i} hasn't cross the a, where a = {a}\n")
+                    buy = close[i + 1]
+                    a = a + 75
+
+                    stoploss = low[i] if low[i] < low[i + 1] else low[i + 1]
+                    target = abs(close[i + 1] - stoploss) * rr + close[i + 1]
+                    risk = abs(buy - stoploss)
+                    quantity = risk_per_trade / risk
+                    total_buy_amount = buy * quantity
+
+
+                    trade_book["Index"].append(i)
+                    trade_book["Buy"].append(buy)
+                    trade_book["Stoploss"].append(stoploss)
+                    trade_book["Risk"].append(risk)
+                    trade_book["Quantity"].append(quantity)
+                    trade_book["Total buy amount"].append(total_buy_amount)
+                    trade_book["Sell"].append("NaN")
+                    trade_book["Total sell amount"].append("NaN")
+                    trade_book["PnL"].append("NaN")
+                    trade_book["Net PnL"].append("NaN")
+
+                    buy_flag = False
+
+                    # print(f"The buy value of {i + 1} candle is {buy}")
+                    # print(f"No. of share bought: {quantity} and total amount to buy:{total_buy_amount}")
+                    # print(f"Stoploss: {stoploss} and Target: {target}")
+                    print("Buy")
+
+
+        elif buy_flag == False and close[i] <= stoploss:
+            sell = close[i]
+            # print(f"The sell value of {i} candle is {sell}")
+            buy_flag = True
+            counter = counter + 1
+            profit = (sell - buy) * quantity
+
+            net_pnl = net_pnl + profit
+            total_sell_amount = quantity * sell
+            # print(f"No. of share sold: {quantity} and total amount to sell (stoploss): {total_sell_amount}")
+            # print(f"Profit of {i} trade(stoploss): {profit}")
+            trade_counter = trade_counter + 1
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append("NaN")
+            trade_book["Stoploss"].append("NaN")
+            trade_book["Risk"].append("NaN")
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append("NaN")
+            trade_book["Sell"].append(sell)
+            trade_book["Total sell amount"].append(total_sell_amount)
+            trade_book["PnL"].append(profit)
+            trade_book["Net PnL"].append(net_pnl)
+
+        elif buy_flag == False and close[i] >= target:
+            sell = close[i]
+            # print(f"The sell value of {i} candle is {sell}")
+            profit = (sell - buy) * quantity
+            net_pnl = net_pnl + profit
+            buy_flag = True
+
+            trade_counter = trade_counter + 1
+            total_sell_amount = quantity * sell
+            # print(f"No. of share sold: {quantity} and total amount to sell:{total_sell_amount}")
+            # print(f'Profit of {i} trade: {profit}')
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append("NaN")
+            trade_book["Stoploss"].append("NaN")
+            trade_book["Risk"].append("NaN")
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append("NaN")
+            trade_book["Sell"].append(sell)
+            trade_book["Total sell amount"].append(total_sell_amount)
+            trade_book["PnL"].append(profit)
+            trade_book["Net PnL"].append(net_pnl)
+        # elif buy_flag == False and i == a:
+        #     print()
+        #     a = a + 75
+
+
+    print(f"net_pnl: {net_pnl} and no. of trades: {trade_counter} and stoploss counter: {counter} ")
+    trade_book_data_frame = pd.DataFrame(trade_book)
+    print(trade_book_data_frame.to_string())
+    trade_book_data_frame.to_excel("Trade_book.xlsx", "Book1")
+
+def purchase_sell3(supertrend, ema, high, low, close, rr):
+    m = len(close)
+    counter = 0
+    flag = True #Can be purchased
+    flag2 = True
+    profit = 0
+    net_pnl = 0
+    trade_counter = 0
+    risk_per_trade = 500
+    a = 71
+    n = 0
+
+
+
+    trade_book = {
+        "Index": [],
+        "Buy": [],
+        "Quantity": [],
+        "Total buy amount": [],
+        "Risk": [],
+        "Stoploss": [],
+        "Sell": [],
+        "Total sell amount": [],
+        "PnL": [],
+        "Net PnL": [],
+
+    }
+    for i in range(m):
+        if i > 71+n*75:
+            n = n+1
+            a = 71+n*75
+
+
+        if i<(m-1) and \
+                supertrend['Supertrend'][i] == True and \
+                ema[i] > high[i] and \
+                close[i + 1] > high[i] and \
+                flag == True :
+
+            print(f"Under BUY condition, a = {a}, i = {i}, n = {n}\n")
+
+            buy = close[i + 1]
+            flag = False
+            flag2 = True
+
+            stoploss = low[i] if low[i] < low[i + 1] else low[i + 1]
+            target = abs(close[i + 1] - stoploss) * rr + close[i + 1]
+            risk = abs(buy - stoploss)
+            quantity = risk_per_trade / risk
+            total_buy_amount = buy * quantity
+
+            # print(f"The buy value of {i + 1} candle is {buy}")
+            # print(f"No. of share bought: {quantity} and total amountto buy:{total_buy_amount}")
+            # print(f"Stoploss: {stoploss} and Target: {target}")
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append(buy)
+            trade_book["Stoploss"].append(stoploss)
+            trade_book["Risk"].append(risk)
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append(total_buy_amount)
+            trade_book["Sell"].append("NaN")
+            trade_book["Total sell amount"].append("NaN")
+            trade_book["PnL"].append("NaN")
+            trade_book["Net PnL"].append("NaN")
+
+
+        elif flag == False and close[i] <= stoploss:
+            print(f"Under STOPLOSS condition, a = {a}, i = {i}\n")
+
+            sell = close[i]
+            # print(f"The sell value of {i} candle is {sell}")
+            flag = True
+            flag2 = False
+            counter = counter + 1
+            profit = (sell - buy) * quantity
+            net_pnl = net_pnl + profit
+            total_sell_amount = quantity * sell
+            # print(f"No. of share sold: {quantity} and total amount to sell (stoploss): {total_sell_amount}")
+            # print(f"Profit of {i} trade(stoploss): {profit}")
+            trade_counter = trade_counter + 1
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append("NaN")
+            trade_book["Stoploss"].append("NaN")
+            trade_book["Risk"].append("NaN")
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append("NaN")
+            trade_book["Sell"].append(sell)
+            trade_book["Total sell amount"].append(total_sell_amount)
+            trade_book["PnL"].append(profit)
+            trade_book["Net PnL"].append(net_pnl)
+
+        elif flag == False and close[i] >= target:
+            print(f"Under TARGET condition, a = {a}, i = {i}\n")
+
+            sell = close[i]
+            # print(f"The sell value of {i} candle is {sell}")
+            profit = (sell - buy) * quantity
+            net_pnl = net_pnl + profit
+            flag = True
+            flag2 = False
+            trade_counter = trade_counter + 1
+            total_sell_amount = quantity * sell
+            # print(f"No. of share sold: {quantity} and total amount to sell:{total_sell_amount}")
+            # print(f'Profit of {i} trade: {profit}')
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append("NaN")
+            trade_book["Stoploss"].append("NaN")
+            trade_book["Risk"].append("NaN")
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append("NaN")
+            trade_book["Sell"].append(sell)
+            trade_book["Total sell amount"].append(total_sell_amount)
+            trade_book["PnL"].append(profit)
+            trade_book["Net PnL"].append(net_pnl)
+
+        elif flag == False and i >= a and flag2 == True:
+
+            print(f"Under MARKET CLOSE condition, a = {a}, i = {i}\n")
+
+            sell = close[i]
+             # print(f"The sell value of {i} candle is {sell}")
+            profit = (sell - buy) * quantity
+            net_pnl = net_pnl + profit
+            flag = True
+            flag2 = False
+            trade_counter = trade_counter + 1
+            total_sell_amount = quantity * sell
+
+            trade_book["Index"].append(i)
+            trade_book["Buy"].append("NaN")
+            trade_book["Stoploss"].append("NaN")
+            trade_book["Risk"].append("NaN")
+            trade_book["Quantity"].append(quantity)
+            trade_book["Total buy amount"].append("NaN")
+            trade_book["Sell"].append(sell)
+            trade_book["Total sell amount"].append(total_sell_amount)
+            trade_book["PnL"].append(profit)
+            trade_book["Net PnL"].append(net_pnl)
+
+
+
+
+    print(f"net_pnl: {net_pnl} and no. of trades: {trade_counter} and stoploss counter: {counter} ")
+    trade_book_data_frame = pd.DataFrame(trade_book)
+    print(trade_book_data_frame.to_string())
+    trade_book_data_frame.to_excel("Trade_book.xlsx", "Book1")
